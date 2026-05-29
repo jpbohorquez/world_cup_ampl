@@ -125,9 +125,14 @@ with col_target:
     all_teams = sorted(st.session_state.df_teams['team'].unique())
     default_index = all_teams.index("New Zealand") if "New Zealand" in all_teams else 0
     target_team = st.selectbox("Select Team", options=all_teams, index=default_index, help="Pick the nation you want to analyze.")
-    
     target_group = st.session_state.df_teams[st.session_state.df_teams['team'] == target_team]['group'].iloc[0]
-    st.info(f"{get_flag(target_team)} Team: **{target_team}** | Group: **{target_group}**")
+
+    st.markdown(f"""
+        <div style='background-color: #e1f5fe; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center;'>
+            <span style='font-size: 40px; margin-right: 10px;'>{get_flag(target_team)}</span>
+            <span style='font-size: 20px;'>Team: <b>{target_team}</b> | Group: <b>{target_group}</b></span>
+        </div>
+    """, unsafe_allow_html=True)
 
     if st.button("🚀 Run Scenarios", type="primary", width='content'):
         with st.spinner("Solving the IP..."):
@@ -156,6 +161,22 @@ with col_target:
             st.error("### ❌ ELIMINATED")
             st.caption("No possible combination of results allows qualification.")
 
+        # --- Creative Group Table View ---
+        st.write(f"#### Group {target_group} Standings (Current/Best Case)")
+        group_data = br['standings'][br['standings']['Group'] == target_group].sort_values('Rank')
+        
+        def highlight_target(row):
+            return ['background-color: #ff4b4b22' if row.Team == target_team else '' for _ in row]
+
+        # Centering the target group table using columns
+        _, cent_col, _ = st.columns([0.05, 0.9, 0.05])
+        with cent_col:
+            st.dataframe(
+                group_data[['Rank', 'Team', 'Points', 'GD', 'GS', 'GC']].style.apply(highlight_target, axis=1),
+                hide_index=True,
+                width='content'
+            )
+
 # --- Fixtures Management (Right Column) ---
 with col_fixtures:
     st.subheader("📅 Fixture Management")
@@ -179,21 +200,23 @@ with col_fixtures:
         df_f = df_f[(df_f['team1'].isin(filter_team)) | (df_f['team2'].isin(filter_team))]
     
     st.caption("Edit results below (Goals & Played checkbox) to lock in actual scores.")
-    edited_fixture = st.data_editor(
-        df_f,
-        column_config={
-            "team1": "Home",
-            "goals1": st.column_config.NumberColumn("Goals", min_value=0, max_value=10, step=1, format="%d"),
-            "goals2": st.column_config.NumberColumn("Goals", min_value=0, max_value=10, step=1, format="%d"),
-            "team2": "Away",
-            "group": "Group",
-            "stadium": None,
-        },
-        disabled=["team1", "team2", "group"],
-        hide_index=True,
-        width='content',
-        key="fixture_editor"
-    )
+    _, c_tab, _ = st.columns([0.25, 0.7, 0.25])
+    with c_tab:
+        edited_fixture = st.data_editor(
+            df_f,
+            column_config={
+                "team1": "Home",
+                "goals1": st.column_config.NumberColumn("Goals", min_value=0, max_value=10, step=1, format="%d"),
+                "goals2": st.column_config.NumberColumn("Goals", min_value=0, max_value=10, step=1, format="%d"),
+                "team2": "Away",
+                "group": "Group",
+                "stadium": None,
+            },
+            disabled=["team1", "team2", "group"],
+            hide_index=True,
+            width='content',
+            key="fixture_editor"
+        )
     
     # Update global state from filtered editor
     if not edited_fixture.equals(df_f):
@@ -215,22 +238,28 @@ if 'best_results' in st.session_state:
             
             g_stand = res['standings'][res['standings']['Group'] == sel_group].sort_values('Rank')
             st.write(f"**Group {sel_group} Final Table**")
-            st.dataframe(
-                g_stand[['Rank', 'Team', 'Points', 'GD', 'GS', 'GC', 'Qualified']].style.apply(highlight_rows, target=target_team, axis=1),
-                hide_index=True, 
-                width='content',
-                column_config={"Qualified": None} # This hides the column but style.apply still has access to it
-            )
+            # Centering the table using columns
+            _, c_tab, _ = st.columns([0.1, 0.8, 0.1])
+            with c_tab:
+                st.dataframe(
+                    g_stand[['Rank', 'Team', 'Points', 'GD', 'GS', 'GC', 'Qualified']].style.apply(highlight_rows, target=target_team, axis=1),
+                    hide_index=True, 
+                    width='content',
+                    column_config={"Qualified": None} # This hides the column but style.apply still has access to it
+                )
             
             st.write("**Classification of 3rd Place Teams**")
             third_places = res['standings'][res['standings']['Rank'] == 3].copy()
             third_places = third_places.sort_values('ThirdPlaceRank')            
-            st.dataframe(
-                third_places[['ThirdPlaceRank', 'Team', 'Group', 'Points', 'GD', 'GS', 'Qualified']].style.apply(highlight_rows, target=target_team, axis=1),
-                hide_index=True, 
-                width='content',
-                column_config={"Qualified": None}
-            )
+            # Centering the table using columns
+            _, c_3rd, _ = st.columns([0.1, 0.8, 0.1])
+            with c_3rd:
+                st.dataframe(
+                    third_places[['ThirdPlaceRank', 'Team', 'Group', 'Points', 'GD', 'GS', 'Qualified']].style.apply(highlight_rows, target=target_team, axis=1),
+                    hide_index=True, 
+                    width='content',
+                    column_config={"Qualified": None}
+                )
 
         with sc_col2:
             st.write(f"**Group {sel_group} Projected Results**")
@@ -238,8 +267,8 @@ if 'best_results' in st.session_state:
             g_matches = g_matches[g_matches['Group'] == sel_group]
             
             # Larger flag and goal size
-            f_size = "24px"
-            g_size = "28px"
+            f_size = "32px"
+            g_size = "36px"
             
             # Formatting match display
             for _, m in g_matches.iterrows():
@@ -248,16 +277,16 @@ if 'best_results' in st.session_state:
                 # Highlight match if target team is playing
                 prefix = "👉 " if (t1 == target_team or t2 == target_team) else ""
                 
-                # HTML for custom positioning and sizing
+                # HTML for custom positioning and sizing (Centered)
                 match_html = f"""
-                <div style='display: flex; align-items: center; margin-bottom: 5px; font-weight: {'bold' if prefix else 'normal'};'>
-                    <span style='margin-right: 10px;'>{prefix}{t1}</span>
-                    <span style='font-size: {f_size}; margin-right: 5px;'>{get_flag(t1)}</span>
-                    <span style='font-size: {g_size}; min-width: 30px; text-align: center;'>{int(m['Goals1'])}</span>
-                    <span style='font-size: {g_size}; margin: 0 10px;'>-</span>
-                    <span style='font-size: {g_size}; min-width: 30px; text-align: center;'>{int(m['Goals2'])}</span>
-                    <span style='font-size: {f_size}; margin-left: 5px;'>{get_flag(t2)}</span>
-                    <span style='margin-left: 10px;'>{t2}</span>
+                <div style='display: flex; align-items: center; justify-content: center; margin-bottom: 10px; font-weight: {'bold' if prefix else 'normal'};'>
+                    <div style='text-align: right; flex: 1; margin-right: 15px;'>{prefix}{t1}</div>
+                    <div style='font-size: {f_size}; margin-right: 8px;'>{get_flag(t1)}</div>
+                    <div style='font-size: {g_size}; min-width: 45px; text-align: center; background: #f0f2f6; border-radius: 5px; padding: 2px;'>{int(m['Goals1'])}</div>
+                    <div style='font-size: {g_size}; margin: 0 10px;'>-</div>
+                    <div style='font-size: {g_size}; min-width: 45px; text-align: center; background: #f0f2f6; border-radius: 5px; padding: 2px;'>{int(m['Goals2'])}</div>
+                    <div style='font-size: {f_size}; margin-left: 8px;'>{get_flag(t2)}</div>
+                    <div style='text-align: left; flex: 1; margin-left: 15px;'>{t2}</div>
                 </div>
                 """
                 st.markdown(match_html, unsafe_allow_html=True)
