@@ -75,6 +75,44 @@ with st.sidebar:
         if 'worst_results' in st.session_state: del st.session_state.worst_results
         st.rerun()
 
+# --- Helpers ---
+def get_flag(team_name):
+    # Mapping of common team names to their flags
+    flags = {
+        "Argentina": "🇦🇷", "Australia": "🇦🇺", "Austria": "🇦🇹", "Belgium": "🇧🇪",
+        "Brazil": "🇧🇷", "Canada": "🇨🇦", "Colombia": "🇨🇴", "Croatia": "🇭🇷",
+        "Czechia": "🇨🇿", "Denmark": "🇩🇰", "Ecuador": "🇪🇨", "Egypt": "🇪🇬",
+        "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "France": "🇫🇷", "Germany": "🇩🇪", "Ghana": "🇬🇭",
+        "Hungary": "🇭🇺", "Iran": "🇮🇷", "Iraq": "🇮🇶", "Italy": "🇮🇹",
+        "Japan": "🇯🇵", "Mexico": "🇲🇽", "Morocco": "🇲🇦", "Netherlands": "🇳🇱",
+        "New Zealand": "🇳🇿", "Nigeria": "🇳🇬", "Norway": "🇳🇴", "Panama": "🇵🇦",
+        "Paraguay": "🇵🇾", "Poland": "🇵🇱", "Portugal": "🇵🇹", "Qatar": "🇶🇦",
+        "Saudi Arabia": "🇸🇦", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "Senegal": "🇸🇳", "Serbia": "🇷🇸",
+        "Slovakia": "🇸🇰", "Spain": "🇪🇸", "Sweden": "🇸🇪", "Switzerland": "🇨🇭",
+        "Tunisia": "🇹🇳", "Türkiye": "🇹🇷", "USA": "🇺🇸", "Uruguay": "🇺🇾",
+        "Wales": "🏴󠁧󠁢󠁷󠁬󠁳󠁿", "South Africa": "🇿🇦", "South Korea": "🇰🇷", "Bosnia-Herzegovina": "🇧🇦",
+        "Haiti": "🇭🇹", "Curacao": "🇨🇼", "Côte d'Ivoire": "🇨🇮", "Algeria": "🇩🇿",
+        "Congo DR": "🇨🇩", "Uzbekistan": "🇺🇿", "Jordan": "🇯🇴", "Cabo Verde": "🇨🇻",
+        "Ukraine": "🇺🇦", "Venezuela": "🇻🇪"
+    }
+    return flags.get(team_name, "🏳️")
+
+def highlight_rows(row, target):
+    # Highlight qualified in light green
+    # Highlight target in a subtle red/blue
+    colors = []
+    is_qualified = row.get('Qualified', 0) == 1
+    is_target = row.get('Team') == target
+    
+    for _ in row:
+        if is_target:
+            colors.append('background-color: #ff4b4b44; font-weight: bold')
+        elif is_qualified:
+            colors.append('background-color: #d1fae5')
+        else:
+            colors.append('')
+    return colors
+
 # --- Main Layout ---
 st.title("🏆 FIFA World Cup 2026 Projection Engine")
 st.markdown("Analyze mathematical qualification boundaries for any team based on current and future results.")
@@ -89,9 +127,9 @@ with col_target:
     target_team = st.selectbox("Select Team", options=all_teams, index=default_index, help="Pick the nation you want to analyze.")
     
     target_group = st.session_state.df_teams[st.session_state.df_teams['team'] == target_team]['group'].iloc[0]
-    st.info(f"Team: **{target_team}** | Group: **{target_group}**")
+    st.info(f"{get_flag(target_team)} Team: **{target_team}** | Group: **{target_group}**")
 
-    if st.button("🚀 Run Scenarios", type="primary", width='stretch'):
+    if st.button("🚀 Run Scenarios", type="primary", width='content'):
         with st.spinner("Solving the IP..."):
             best_results = run_optimization(st.session_state.df_teams, st.session_state.df_fixture, target_team, "BestCase", solver_choice)
             worst_results = run_optimization(st.session_state.df_teams, st.session_state.df_fixture, target_team, "WorstCase", solver_choice)
@@ -124,7 +162,13 @@ with col_fixtures:
     
     # Filtering UI
     f_col1, f_col2 = st.columns(2)
-    filter_group = f_col1.multiselect("Filter by Group", options=sorted(st.session_state.df_teams['group'].unique()), help="Focus on specific groups.")
+    # Default filter by target team's group
+    filter_group = f_col1.multiselect(
+        "Filter by Group", 
+        options=sorted(st.session_state.df_teams['group'].unique()), 
+        default=[target_group] if target_group in st.session_state.df_teams['group'].unique() else [],
+        help="Focus on specific groups."
+    )
     filter_team = f_col2.multiselect("Filter by Team", options=sorted(st.session_state.df_teams['team'].unique()), help="Search for a specific country's matches.")
     
     # Filter logic
@@ -147,17 +191,12 @@ with col_fixtures:
         },
         disabled=["team1", "team2", "group"],
         hide_index=True,
-        width='stretch',
+        width='content',
         key="fixture_editor"
     )
     
     # Update global state from filtered editor
     if not edited_fixture.equals(df_f):
-        # We need to update the original session_state.df_fixture with changes from edited_fixture
-        # Match by an implicit index or just update rows that changed
-        # For simplicity, we can use an index if we added one, but here we'll map back.
-        # This is a bit tricky with filtering. Let's assume the user doesn't change teams.
-        st.write('test')
         for idx, row in edited_fixture.iterrows():
             st.session_state.df_fixture.loc[idx, ['goals1', 'goals2']] = row[['goals1', 'goals2']]
 
@@ -176,21 +215,52 @@ if 'best_results' in st.session_state:
             
             g_stand = res['standings'][res['standings']['Group'] == sel_group].sort_values('Rank')
             st.write(f"**Group {sel_group} Final Table**")
-            st.dataframe(g_stand[['Rank', 'Team', 'Points', 'GD', 'GS', 'GC']], hide_index=True, width='stretch')
+            st.dataframe(
+                g_stand[['Rank', 'Team', 'Points', 'GD', 'GS', 'GC', 'Qualified']].style.apply(highlight_rows, target=target_team, axis=1),
+                hide_index=True, 
+                width='content',
+                column_config={"Qualified": None} # This hides the column but style.apply still has access to it
+            )
             
             st.write("**Classification of 3rd Place Teams**")
-            # Extract 3rd places
             third_places = res['standings'][res['standings']['Rank'] == 3].copy()
             third_places = third_places.sort_values('ThirdPlaceRank')            
-            st.dataframe(third_places[['ThirdPlaceRank', 'Team', 'Group', 'Points', 'GD', 'GS']], hide_index=True, width='stretch')
+            st.dataframe(
+                third_places[['ThirdPlaceRank', 'Team', 'Group', 'Points', 'GD', 'GS', 'Qualified']].style.apply(highlight_rows, target=target_team, axis=1),
+                hide_index=True, 
+                width='content',
+                column_config={"Qualified": None}
+            )
 
         with sc_col2:
             st.write(f"**Group {sel_group} Projected Results**")
             g_matches = res['matches'].copy()
             g_matches = g_matches[g_matches['Group'] == sel_group]
+            
+            # Larger flag and goal size
+            f_size = "24px"
+            g_size = "28px"
+            
             # Formatting match display
             for _, m in g_matches.iterrows():
-                st.markdown(f"**{m['Team1']}** {int(m['Goals1'])} - {int(m['Goals2'])} **{m['Team2']}**")
+                t1 = m['Team1']
+                t2 = m['Team2']
+                # Highlight match if target team is playing
+                prefix = "👉 " if (t1 == target_team or t2 == target_team) else ""
+                
+                # HTML for custom positioning and sizing
+                match_html = f"""
+                <div style='display: flex; align-items: center; margin-bottom: 5px; font-weight: {'bold' if prefix else 'normal'};'>
+                    <span style='margin-right: 10px;'>{prefix}{t1}</span>
+                    <span style='font-size: {f_size}; margin-right: 5px;'>{get_flag(t1)}</span>
+                    <span style='font-size: {g_size}; min-width: 30px; text-align: center;'>{int(m['Goals1'])}</span>
+                    <span style='font-size: {g_size}; margin: 0 10px;'>-</span>
+                    <span style='font-size: {g_size}; min-width: 30px; text-align: center;'>{int(m['Goals2'])}</span>
+                    <span style='font-size: {f_size}; margin-left: 5px;'>{get_flag(t2)}</span>
+                    <span style='margin-left: 10px;'>{t2}</span>
+                </div>
+                """
+                st.markdown(match_html, unsafe_allow_html=True)
     
     with tab_best:
         render_scenario(st.session_state.best_results, "Best")
