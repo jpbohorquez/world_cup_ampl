@@ -100,7 +100,7 @@ subject to DrawLogic {(i,j) in MATCHES}:
 # IsBehind Logic.
 # This mirrors the FIFA official criteria for World Cup 2026 (exlucing the team conduct score).
 subject to IsBehindLogic {i in TEAMS, j in TEAMS: team_group[i] == team_group[j] and i != j}:
-    IsBehind[i,j] == 1 ==>
+    IsBehind[i,j] == 1 <==>
         (Pts[i] < Pts[j]) or
         
         # Step One
@@ -116,7 +116,7 @@ subject to IsBehindLogic {i in TEAMS, j in TEAMS: team_group[i] == team_group[j]
         (Pts[i] == Pts[j] and H2H_Pts[i,j] == H2H_Pts[j,i] and H2H_GD[i,j] == H2H_GD[j,i] and H2H_GS[i,j] == H2H_GS[j,i] and GD[i] == GD[j] and GS[i] == GS[j] and ord(i) > ord(j));
 
 subject to GlobalIsBehindLogic {i in TEAMS, j in TEAMS: i != j}:
-    GlobalIsBehind[i,j] == 1 ==>
+    GlobalIsBehind[i,j] == 1 <==>
         (Pts[i] < Pts[j]) or
         (Pts[i] == Pts[j] and GD[i] < GD[j]) or
         (Pts[i] == Pts[j] and GD[i] == GD[j] and GS[i] < GS[j]) or

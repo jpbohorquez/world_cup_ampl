@@ -76,7 +76,7 @@ subject to DrawLogic {(i,j) in MATCHES}:
     Draw[i,j] == 1 ==> Goals1[i,j] == Goals2[i,j];
 
 subject to IsBehindLogic {i in TEAMS, j in TEAMS: team_group[i] == team_group[j] and i != j}:
-    IsBehind[i,j] == 1 ==>
+    IsBehind[i,j] == 1 <==>
         (Pts[i] < Pts[j]) or
         (Pts[i] == Pts[j] and H2H_Pts[i,j] < H2H_Pts[j,i]) or
         (Pts[i] == Pts[j] and H2H_Pts[i,j] == H2H_Pts[j,i] and H2H_GD[i,j] < H2H_GD[j,i]) or
@@ -86,7 +86,7 @@ subject to IsBehindLogic {i in TEAMS, j in TEAMS: team_group[i] == team_group[j]
         (Pts[i] == Pts[j] and H2H_Pts[i,j] == H2H_Pts[j,i] and H2H_GD[i,j] == H2H_GD[j,i] and H2H_GS[i,j] == H2H_GS[j,i] and GD[i] == GD[j] and GS[i] == GS[j] and ord(i) > ord(j));
 
 subject to GlobalIsBehindLogic {i in TEAMS, j in TEAMS: i != j}:
-    GlobalIsBehind[i,j] == 1 ==>
+    GlobalIsBehind[i,j] == 1 <==>
         (Pts[i] < Pts[j]) or
         (Pts[i] == Pts[j] and GD[i] < GD[j]) or
         (Pts[i] == Pts[j] and GD[i] == GD[j] and GS[i] < GS[j]) or
@@ -100,74 +100,64 @@ minimize WorstCase: Qualifies[target_team] + 0.5 * (sum {(i,j) in MATCHES} (Goal
 maximize BestCase: Qualifies[target_team] - 0.5 * (sum {(i,j) in MATCHES} (Goals1[i,j] + Goals2[i,j]) / (card(MATCHES) * 20));
 """
 
-def run_optimization(df_teams, df_fixture, target_team, objective_name):
+def run_optimization(df_teams, df_fixture, target_team, objective_name, solver_name="highs"):
     ampl = AMPL()
     ampl.eval(AMPL_MODEL)
     
+    # Ordering teams is crucial for ranking tiebreaker.
+    df_teams_solver = df_teams.copy()
+    df_teams_solver.sort_values(by='ranking', inplace=True)
+
     # Pre-process fixtures to match AMPL expectations
-    # Filter only relevant columns for solver
     df_fix_solver = df_fixture.copy()
-    # Ensure team1, team2 are strings
-    df_fix_solver['team1'] = df_fix_solver['team1'].astype(str)
-    df_fix_solver['team2'] = df_fix_solver['team2'].astype(str)
+    df_fix_solver.set_index(['team1','team2'], inplace=True)
+    df_fix_solver.loc[df_fix_solver['goals1'].notna(),'played'] = 1
     
-    # Played flag based on whether goals are provided
-    df_fix_solver['played'] = df_fix_solver.apply(
-        lambda x: 1 if pd.notna(x['goals1']) and pd.notna(x['goals2']) else 0, axis=1
-    )
+    ampl.set["TEAMS"] = df_teams_solver['team'].tolist()
+    ampl.set["GROUPS"] = df_teams_solver['group'].unique().tolist()
+    ampl.set["MATCHES"] = df_fix_solver.index.tolist()
     
-    # Filter matches to only those within same group (model constraint)
-    # Actually, teams_df defines which teams are in which group
-    team_to_group = df_teams.set_index('team')['group'].to_dict()
-    df_fix_solver['group1'] = df_fix_solver['team1'].map(team_to_group)
-    df_fix_solver['group2'] = df_fix_solver['team2'].map(team_to_group)
-    df_fix_solver = df_fix_solver[df_fix_solver['group1'] == df_fix_solver['group2']]
+    ampl.set_data(df_teams_solver[['team', 'group']].set_index('team').rename(columns={'group': 'team_group'}))
     
-    # Load Sets
-    ampl.set["TEAMS"] = df_teams['team'].tolist()
-    ampl.set["GROUPS"] = df_teams['group'].unique().tolist()
-    ampl.set["MATCHES"] = df_fix_solver[['team1', 'team2']].values.tolist()
-    
-    # Load Parameters
-    ampl.set_data(df_teams[['team', 'group']].set_index('team').rename(columns={'group': 'team_group'}))
-    
-    # Match data
-    match_data = df_fix_solver.set_index(['team1', 'team2'])[['played', 'goals1', 'goals2']].fillna(0)
-    match_data = match_data.rename(columns={'goals1': 'actual_goals1', 'goals2': 'actual_goals2'})
+    match_data = df_fix_solver.loc[df_fix_solver['played']==1,['played','goals1','goals2']].rename(columns={'goals1':'actual_goals1','goals2':'actual_goals2'})
     ampl.set_data(match_data)
     
-    # Target team
     ampl.param['target_team'] = target_team
     
-    # Solve
     ampl.eval(f"objective {objective_name};")
-    options = {
-        "solver": "highs",
-        "highs_options": "outlev=0"
-    }
-    ampl.solve(**options)
+    ampl.option["solver"] = solver_name.lower()
+    
+    try:
+        ampl.solve()
+    except Exception as e:
+        return {"error": str(e)}
     
     # Extract results
-    qualifies = ampl.get_variable('Qualifies').get_values().to_pandas()
-    pts = ampl.get_variable('Pts').get_values().to_pandas()
-    gs = ampl.get_variable('GS').get_values().to_pandas()
-    gc = ampl.get_variable('GC').get_values().to_pandas()
-    gd = ampl.get_variable('GD').get_values().to_pandas()
-    ranks = ampl.get_variable('GroupRank').get_values().to_pandas()
-    
-    match_results = ampl.get_data('{(i,j) in MATCHES} (Goals1[i,j], Goals2[i,j])').to_pandas()
-    
-    # Assemble standings
-    standings = df_teams.set_index('team').copy()
-    standings['Points'] = pts
-    standings['GS'] = gs
-    standings['GC'] = gc
-    standings['GD'] = gd
-    standings['Rank'] = ranks
-    standings['Qualified'] = qualifies
+    standings = ampl.get_data('''team_group, 
+                              Qualifies, 
+                              Pts, 
+                              GS, 
+                              GC, 
+                              GD, 
+                              GroupRank, 
+                              {t in TEAMS} if GroupRank[t]==3 then 1+ThirdPlacesAhead[t] else 0''').to_pandas()
+    standings.columns = ['Group', 'Qualified', 'Points', 'GS', 'GC', 'GD', 'Rank', 'ThirdPlaceRank']
+    standings.reset_index(names='Team', inplace=True)
+
+
+    match_results = ampl.get_data('''{(i,j) in MATCHES} 
+                                  (team_group[i], 
+                                  Goals1[i,j], 
+                                  Goals2[i,j], 
+                                  Win1[i,j], 
+                                  Draw[i,j],
+                                  Win2[i,j])''').to_pandas()
+    match_results.columns = ['Group', 'Goals1', 'Goals2', 'Win1', 'Draw', 'Win2']
+    match_results.reset_index(names=['Team1','Team2'], inplace=True)
+
     
     return {
-        'standings': standings.reset_index(),
-        'matches': match_results.reset_index(),
-        'target_qualified': bool(qualifies.loc[target_team].values[0] > 0.5)
+        'standings': standings,
+        'matches': match_results,
+        'target_qualified': bool(standings.loc[standings['Team'] == target_team, 'Qualified'].values[0] > 0.5)
     }

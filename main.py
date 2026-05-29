@@ -21,7 +21,7 @@ ampl.set["MATCHES"] = df_fixture.index.tolist()
 ampl.set_data(df_teams[['team','group']].set_index('team').rename(columns={'group':'team_group'}))
 ampl.set_data(df_fixture.loc[df_fixture['played']==1,['played','goals1','goals2']].rename(columns={'goals1':'actual_goals1','goals2':'actual_goals2'}))
 
-ampl.param['target_team'] = 'Colombia'
+ampl.param['target_team'] = 'New Zealand'
 
 # Solving the model
 ampl.eval("objective WorstCase;")
@@ -36,3 +36,4 @@ print("Fin")
 # ampl.get_data('{(i,j) in MATCHES} (Goals1[i,j], Goals2[i,j], Win1[i,j], Draw[i,j]);').to_pandas()
 # ampl.get_data('{(i,j) in MATCHES: i == "Colombia" or j == "Colombia"} (Goals1[i,j], Goals2[i,j], Win1[i,j], Draw[i,j]);').to_pandas()
 # ampl.get_data("Pts").to_pandas()
+# ampl.get_data('{i in TEAMS,j in TEAMS: (i,j) in MATCHES and team_group[i]=="G"} (Pts[i],H2H_Pts[i,j],H2H_Pts[j,i],H2H_GD[i,j],H2H_GD[j,i],H2H_GS[i,j],H2H_GS[j,i],GD[i],GD[j],GS[i],GS[j],ord(i), ord(j),IsBehind[i,j],GroupRank[i])').to_pandas()
