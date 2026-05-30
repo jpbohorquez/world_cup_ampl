@@ -177,6 +177,21 @@ with col_target:
                 width='content'
             )
 
+def update_fixture_data():
+    # The data_editor stores edits in session state under its key.
+    # Format: {"edited_rows": {"0": {"goals1": 2}}, "added_rows": [], "deleted_rows": []}
+    editor_state = st.session_state["fixture_editor"]
+    
+    # We must map the editor's visual row index back to the master dataframe's index
+    for row_pos_str, changes in editor_state["edited_rows"].items():
+        row_pos = int(row_pos_str)
+        # Get the actual index from the filtered dataframe we saved in session state
+        actual_index = st.session_state.current_filtered_df.index[row_pos]
+        
+        # Apply each changed column to the master dataframe
+        for col, new_val in changes.items():
+            st.session_state.df_fixture.loc[actual_index, col] = new_val
+            
 # --- Fixtures Management (Right Column) ---
 with col_fixtures:
     st.subheader("📅 Fixture Management")
@@ -193,13 +208,15 @@ with col_fixtures:
     filter_team = f_col2.multiselect("Filter by Team", options=sorted(st.session_state.df_teams['team'].unique()), help="Search for a specific country's matches.")
     
     # Filter logic
-    df_f = st.session_state.df_fixture
+    df_f = st.session_state.df_fixture.copy()
     if filter_group:
         df_f = df_f[df_f['group'].isin(filter_group)]
     if filter_team:
         df_f = df_f[(df_f['team1'].isin(filter_team)) | (df_f['team2'].isin(filter_team))]
     
-    st.caption("Edit results below (Goals & Played checkbox) to lock in actual scores.")
+    st.session_state.current_filtered_df = df_f
+
+    st.caption("Edit results below (Goals) to lock in actual or simulated scores.")
     _, c_tab, _ = st.columns([0.25, 0.7, 0.25])
     with c_tab:
         edited_fixture = st.data_editor(
@@ -215,13 +232,9 @@ with col_fixtures:
             disabled=["team1", "team2", "group"],
             hide_index=True,
             width='content',
-            key="fixture_editor"
+            key="fixture_editor",
+            on_change=update_fixture_data
         )
-    
-    # Update global state from filtered editor
-    if not edited_fixture.equals(df_f):
-        for idx, row in edited_fixture.iterrows():
-            st.session_state.df_fixture.loc[idx, ['goals1', 'goals2']] = row[['goals1', 'goals2']]
 
 # --- Scenario Tabs (Full Results) ---
 if 'best_results' in st.session_state:
