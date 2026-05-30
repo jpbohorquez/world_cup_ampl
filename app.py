@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from model import run_optimization
 import io
+import random
 
 # --- Page Config ---
 st.set_page_config(page_title="World Cup 2026 Optimization", layout="wide", page_icon="⚽")
@@ -29,6 +30,86 @@ def load_data(file):
     df_teams = pd.read_excel(file, sheet_name='teams')
     df_fixture = pd.read_excel(file, sheet_name='fixture')
     return df_teams, df_fixture
+
+# --- Helpers ---
+def get_flag(team_name):
+    # Mapping of common team names to their flags
+    flags = {
+        "Argentina": "🇦🇷", "Australia": "🇦🇺", "Austria": "🇦🇹", "Belgium": "🇧🇪",
+        "Brazil": "🇧🇷", "Canada": "🇨🇦", "Colombia": "🇨🇴", "Croatia": "🇭🇷",
+        "Czechia": "🇨🇿", "Denmark": "🇩🇰", "Ecuador": "🇪🇨", "Egypt": "🇪🇬",
+        "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "France": "🇫🇷", "Germany": "🇩🇪", "Ghana": "🇬🇭",
+        "Hungary": "🇭🇺", "Iran": "🇮🇷", "Iraq": "🇮🇶", "Italy": "🇮🇹",
+        "Japan": "🇯🇵", "Mexico": "🇲🇽", "Morocco": "🇲🇦", "Netherlands": "🇳🇱",
+        "New Zealand": "🇳🇿", "Nigeria": "🇳🇬", "Norway": "🇳🇴", "Panama": "🇵🇦",
+        "Paraguay": "🇵🇾", "Poland": "🇵🇱", "Portugal": "🇵🇹", "Qatar": "🇶🇦",
+        "Saudi Arabia": "🇸🇦", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "Senegal": "🇸🇳", "Serbia": "🇷🇸",
+        "Slovakia": "🇸🇰", "Spain": "🇪🇸", "Sweden": "🇸🇪", "Switzerland": "🇨🇭",
+        "Tunisia": "🇹🇳", "Türkiye": "🇹🇷", "USA": "🇺🇸", "Uruguay": "🇺🇾",
+        "Wales": "🏴󠁧󠁢󠁷󠁬󠁳󠁿", "South Africa": "🇿🇦", "South Korea": "🇰🇷", "Bosnia-Herzegovina": "🇧🇦",
+        "Haiti": "🇭🇹", "Curacao": "🇨🇼", "Côte d'Ivoire": "🇨🇮", "Algeria": "🇩🇿",
+        "Congo DR": "🇨🇩", "Uzbekistan": "🇺🇿", "Jordan": "🇯🇴", "Cabo Verde": "🇨🇻",
+        "Ukraine": "🇺🇦", "Venezuela": "🇻🇪"
+    }
+    return flags.get(team_name, "🏳️")
+
+def simulate_goals(rank1, rank2):
+    # diff > 0 means team1 is better (rank1 < rank2)
+    diff = rank2 - rank1
+    # Bias logic: higher ranking difference increases prob of win for better team
+    bias = diff / 30.0
+    gd = round(random.gauss(bias, 1.5))
+    
+    # Rule: Match GD between 0 and 5
+    gd = max(-5, min(5, gd))
+    
+    # Rule: Individual team goals between 0 and 5
+    max_extra = 5 - abs(gd)
+    extra = random.randint(0, max_extra)
+    
+    if gd >= 0:
+        return gd + extra, extra
+    else:
+        return extra, abs(gd) + extra
+
+def run_simulation_batch(num_matches):
+    df_teams = st.session_state.df_teams
+    df_fixture = st.session_state.df_fixture.copy()
+    ranks = df_teams.set_index('team')['ranking'].to_dict()
+    
+    # Clear goals and simulate
+    df_fixture['goals1'] = pd.NA
+    df_fixture['goals2'] = pd.NA
+    
+    for i in range(num_matches):
+        t1 = df_fixture.iloc[i]['team1']
+        t2 = df_fixture.iloc[i]['team2']
+        r1 = ranks.get(t1, 50)
+        r2 = ranks.get(t2, 50)
+        
+        g1, g2 = simulate_goals(r1, r2)
+        df_fixture.at[df_fixture.index[i], 'goals1'] = g1
+        df_fixture.at[df_fixture.index[i], 'goals2'] = g2
+    
+    st.session_state.df_fixture = df_fixture
+    if 'best_results' in st.session_state: del st.session_state.best_results
+    if 'worst_results' in st.session_state: del st.session_state.worst_results
+
+def highlight_rows(row, target):
+    # Highlight qualified in light green
+    # Highlight target in a subtle red/blue
+    colors = []
+    is_qualified = row.get('Qualified', 0) == 1
+    is_target = row.get('Team') == target
+    
+    for _ in row:
+        if is_target:
+            colors.append('background-color: #ff4b4b44; font-weight: bold')
+        elif is_qualified:
+            colors.append('background-color: #d1fae5')
+        else:
+            colors.append('')
+    return colors
 
 # --- Session State ---
 if 'df_teams' not in st.session_state:
@@ -59,10 +140,22 @@ with st.sidebar:
 
     st.divider()
     
+    st.subheader("🎲 Simulation Tools")
+    st.caption("Randomly generate results based on team rankings.")
+    col_sim1, col_sim2 = st.columns(2)
+    if col_sim1.button("Simulate 1R", help="Simulate first match for every team."):
+        run_simulation_batch(24)
+        st.rerun()
+    if col_sim2.button("Simulate 1R & 2R", help="Simulate first two matches for every team."):
+        run_simulation_batch(48)
+        st.rerun()
+
+    st.divider()
+    
     st.subheader("Solver Configuration")
     solver_choice = st.selectbox(
         "Choose Optimization Solver",
-        options=["Highs", "Gurobi"],# "Cplex", "Xpress", "Scip"],
+        options=["Gurobi", "Highs"],# "Cplex", "Xpress", "Scip"],
         index=0,
         help="Select the mathematical engine to solve the scenarios. Highs is recommended for most cases."
     )
@@ -73,45 +166,10 @@ with st.sidebar:
         st.session_state.df_fixture = df_fixture
         if 'best_results' in st.session_state: del st.session_state.best_results
         if 'worst_results' in st.session_state: del st.session_state.worst_results
+        st.session_state.target_team = "New Zealand"
+        st.session_state.selected_team = "New Zealand"
         st.rerun()
 
-# --- Helpers ---
-def get_flag(team_name):
-    # Mapping of common team names to their flags
-    flags = {
-        "Argentina": "🇦🇷", "Australia": "🇦🇺", "Austria": "🇦🇹", "Belgium": "🇧🇪",
-        "Brazil": "🇧🇷", "Canada": "🇨🇦", "Colombia": "🇨🇴", "Croatia": "🇭🇷",
-        "Czechia": "🇨🇿", "Denmark": "🇩🇰", "Ecuador": "🇪🇨", "Egypt": "🇪🇬",
-        "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "France": "🇫🇷", "Germany": "🇩🇪", "Ghana": "🇬🇭",
-        "Hungary": "🇭🇺", "Iran": "🇮🇷", "Iraq": "🇮🇶", "Italy": "🇮🇹",
-        "Japan": "🇯🇵", "Mexico": "🇲🇽", "Morocco": "🇲🇦", "Netherlands": "🇳🇱",
-        "New Zealand": "🇳🇿", "Nigeria": "🇳🇬", "Norway": "🇳🇴", "Panama": "🇵🇦",
-        "Paraguay": "🇵🇾", "Poland": "🇵🇱", "Portugal": "🇵🇹", "Qatar": "🇶🇦",
-        "Saudi Arabia": "🇸🇦", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "Senegal": "🇸🇳", "Serbia": "🇷🇸",
-        "Slovakia": "🇸🇰", "Spain": "🇪🇸", "Sweden": "🇸🇪", "Switzerland": "🇨🇭",
-        "Tunisia": "🇹🇳", "Türkiye": "🇹🇷", "USA": "🇺🇸", "Uruguay": "🇺🇾",
-        "Wales": "🏴󠁧󠁢󠁷󠁬󠁳󠁿", "South Africa": "🇿🇦", "South Korea": "🇰🇷", "Bosnia-Herzegovina": "🇧🇦",
-        "Haiti": "🇭🇹", "Curacao": "🇨🇼", "Côte d'Ivoire": "🇨🇮", "Algeria": "🇩🇿",
-        "Congo DR": "🇨🇩", "Uzbekistan": "🇺🇿", "Jordan": "🇯🇴", "Cabo Verde": "🇨🇻",
-        "Ukraine": "🇺🇦", "Venezuela": "🇻🇪"
-    }
-    return flags.get(team_name, "🏳️")
-
-def highlight_rows(row, target):
-    # Highlight qualified in light green
-    # Highlight target in a subtle red/blue
-    colors = []
-    is_qualified = row.get('Qualified', 0) == 1
-    is_target = row.get('Team') == target
-    
-    for _ in row:
-        if is_target:
-            colors.append('background-color: #ff4b4b44; font-weight: bold')
-        elif is_qualified:
-            colors.append('background-color: #d1fae5')
-        else:
-            colors.append('')
-    return colors
 
 # --- Main Layout ---
 st.title("🏆 FIFA World Cup 2026 Projection Engine")
@@ -123,14 +181,20 @@ col_target, col_fixtures = st.columns([1, 2])
 with col_target:
     st.subheader("🎯 Analysis Target")
     all_teams = sorted(st.session_state.df_teams['team'].unique())
-    default_index = all_teams.index("New Zealand") if "New Zealand" in all_teams else 0
-    target_team = st.selectbox("Select Team", options=all_teams, index=default_index, help="Pick the nation you want to analyze.")
-    target_group = st.session_state.df_teams[st.session_state.df_teams['team'] == target_team]['group'].iloc[0]
+    if 'target_team' not in st.session_state:
+        st.session_state.target_team = "New Zealand"
+    
+    def update_team():
+        st.session_state.target_team = st.session_state.selected_team
+
+    target_team_index = all_teams.index(st.session_state.target_team) if st.session_state.target_team in all_teams else 0
+    target_team = st.selectbox("Select Team", options=all_teams, index=target_team_index, help="Pick the nation you want to analyze.", key="selected_team", on_change=update_team)
+    target_group = st.session_state.df_teams[st.session_state.df_teams['team'] == st.session_state.target_team]['group'].iloc[0]
 
     st.markdown(f"""
         <div style='background-color: #e1f5fe; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center;'>
-            <span style='font-size: 40px; margin-right: 10px;'>{get_flag(target_team)}</span>
-            <span style='font-size: 20px;'>Team: <b>{target_team}</b> | Group: <b>{target_group}</b></span>
+            <span style='font-size: 40px; margin-right: 10px;'>{get_flag(st.session_state.target_team)}</span>
+            <span style='font-size: 20px;'>Team: <b>{st.session_state.target_team}</b> | Group: <b>{target_group}</b></span>
         </div>
     """, unsafe_allow_html=True)
 
@@ -144,7 +208,7 @@ with col_target:
             else:
                 st.session_state.best_results = best_results
                 st.session_state.worst_results = worst_results
-    
+
     if 'best_results' in st.session_state:
         st.divider()
         # Status Badge
@@ -161,21 +225,6 @@ with col_target:
             st.error("### ❌ ELIMINATED")
             st.caption("No possible combination of results allows qualification.")
 
-        # --- Creative Group Table View ---
-        st.write(f"#### Group {target_group} Standings (Current/Best Case)")
-        group_data = br['standings'][br['standings']['Group'] == target_group].sort_values('Rank')
-        
-        def highlight_target(row):
-            return ['background-color: #ff4b4b22' if row.Team == target_team else '' for _ in row]
-
-        # Centering the target group table using columns
-        _, cent_col, _ = st.columns([0.05, 0.9, 0.05])
-        with cent_col:
-            st.dataframe(
-                group_data[['Rank', 'Team', 'Points', 'GD', 'GS', 'GC']].style.apply(highlight_target, axis=1),
-                hide_index=True,
-                width='content'
-            )
 
 def update_fixture_data():
     # The data_editor stores edits in session state under its key.
@@ -252,7 +301,7 @@ if 'best_results' in st.session_state:
             g_stand = res['standings'][res['standings']['Group'] == sel_group].sort_values('Rank')
             st.write(f"**Group {sel_group} Final Table**")
             # Centering the table using columns
-            _, c_tab, _ = st.columns([0.1, 0.8, 0.1])
+            _, c_tab, _ = st.columns([0.25, 0.7, 0.25])
             with c_tab:
                 st.dataframe(
                     g_stand[['Rank', 'Team', 'Points', 'GD', 'GS', 'GC', 'Qualified']].style.apply(highlight_rows, target=target_team, axis=1),
@@ -266,7 +315,7 @@ if 'best_results' in st.session_state:
             third_places = res['standings'][res['standings']['Rank'] == 3].copy()
             third_places = third_places.sort_values('ThirdPlaceRank')            
             # Centering the table using columns
-            _, c_3rd, _ = st.columns([0.1, 0.8, 0.1])
+            _, c_3rd, _ = st.columns([0.25, 0.7, 0.25])
             with c_3rd:
                 st.dataframe(
                     third_places[['ThirdPlaceRank', 'Team', 'Group', 'Points', 'GD', 'GS', 'Qualified']].style.apply(highlight_rows, target=target_team, axis=1),

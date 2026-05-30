@@ -6,10 +6,11 @@ ampl = AMPL()
 ampl.read("world_cup.mod")
 
 # Reading data
-df_teams = pd.read_excel("fifa_world_cup_2026.xlsx", sheet_name="teams")
+filename = 'fifa_world_cup_2026_sim1R.xlsx'
+df_teams = pd.read_excel(filename, sheet_name="teams")
 df_teams.sort_values(by='ranking', inplace=True)
 
-df_fixture = pd.read_excel("fifa_world_cup_2026.xlsx", sheet_name="fixture")
+df_fixture = pd.read_excel(filename, sheet_name="fixture")
 df_fixture.set_index(['team1','team2'], inplace=True)
 df_fixture.loc[df_fixture['goals1'].notna(),'played'] = 1
 
@@ -24,10 +25,10 @@ ampl.set_data(df_fixture.loc[df_fixture['played']==1,['played','goals1','goals2'
 ampl.param['target_team'] = 'New Zealand'
 
 # Solving the model
-ampl.eval("objective WorstCase;")
+ampl.eval("objective BestCase;")
 options = {
     "solver":"highs",
-    "mp_options":"outlev=1"
+    "mp_options":"outlev=1 mipgapabs=0.05"
 }
 ampl.solve(**options)
 print("Fin")
