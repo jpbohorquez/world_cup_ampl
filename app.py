@@ -249,6 +249,7 @@ if 'best_results' in st.session_state:
                 )
             
             st.write("**Classification of 3rd Place Teams**")
+            # Extract 3rd places
             third_places = res['standings'][res['standings']['Rank'] == 3].copy()
             third_places = third_places.sort_values('ThirdPlaceRank')            
             # Centering the table using columns
@@ -263,17 +264,23 @@ if 'best_results' in st.session_state:
 
         with sc_col2:
             st.write(f"**Group {sel_group} Projected Results**")
-            g_matches = res['matches'].copy()
-            g_matches = g_matches[g_matches['Group'] == sel_group]
+            
+            # Map solver results by original order in session state
+            solver_lookup = res['matches'].set_index(['Team1', 'Team2']).to_dict('index')
+            
+            # Filter original fixtures for this group
+            orig_fixtures = st.session_state.df_fixture[st.session_state.df_fixture['group'] == sel_group]
             
             # Larger flag and goal size
             f_size = "32px"
             g_size = "36px"
             
-            # Formatting match display
-            for _, m in g_matches.iterrows():
-                t1 = m['Team1']
-                t2 = m['Team2']
+            # Formatting match display in original order
+            for _, row in orig_fixtures.iterrows():
+                t1, t2 = row['team1'], row['team2']
+                m = solver_lookup.get((t1, t2))
+                if not m: continue
+                
                 # Highlight match if target team is playing
                 prefix = "👉 " if (t1 == target_team or t2 == target_team) else ""
                 
