@@ -126,6 +126,7 @@ def run_optimization(df_teams, df_fixture, target_team, objective_name, solver_n
     
     ampl.eval(f"objective {objective_name};")
     ampl.option["solver"] = solver_name.lower()
+    ampl.option["mp_options"] = "outlev=1 mipgapabs=0.01"
     
     try:
         ampl.solve()

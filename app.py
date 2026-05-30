@@ -62,7 +62,7 @@ with st.sidebar:
     st.subheader("Solver Configuration")
     solver_choice = st.selectbox(
         "Choose Optimization Solver",
-        options=["Highs", "Gurobi", "Cplex", "Xpress", "Cbc"],
+        options=["Highs", "Gurobi"],# "Cplex", "Xpress", "Scip"],
         index=0,
         help="Select the mathematical engine to solve the scenarios. Highs is recommended for most cases."
     )
@@ -193,7 +193,7 @@ with col_fixtures:
     filter_team = f_col2.multiselect("Filter by Team", options=sorted(st.session_state.df_teams['team'].unique()), help="Search for a specific country's matches.")
     
     # Filter logic
-    df_f = st.session_state.df_fixture.copy()
+    df_f = st.session_state.df_fixture
     if filter_group:
         df_f = df_f[df_f['group'].isin(filter_group)]
     if filter_team:
