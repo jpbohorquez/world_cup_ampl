@@ -186,7 +186,9 @@ with st.sidebar:
 
 # --- Main Layout ---
 st.title("🏆 FIFA World Cup 2026 Projection Engine")
-st.markdown("Analyze mathematical qualification boundaries for any team based on current and future results.")
+st.markdown('This app is an interactive planner designed to help you see exactly how any team can qualify for the knockout stage under the new **48-team format**. ')
+st.markdown('Built using the **AMPL modeling language** and **Streamlit**, the app analyzes all remaining matches, group tie-breakers, and third-place wild card rules to instantly calculate whether a country is already safe (**CLASSIFIED**), still in the running (**MATHEMATICALLY ALIVE**), or out of options (**ELIMINATED**).')
+st.markdown('You can use the dashboard to type in real scores, test out "what-if" goals, or run quick tournament simulations based on official team rankings. The app then creates side-by-side scoreboards showing the exact best-case and worst-case match outcomes needed for your chosen team to advance, taking the guesswork out of tournament math.')
 
 col_target, col_fixtures = st.columns([1, 2])
 
