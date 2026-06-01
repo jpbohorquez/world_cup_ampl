@@ -7,6 +7,19 @@ import random
 # --- Page Config ---
 st.set_page_config(page_title="World Cup 2026 Optimization", layout="wide", page_icon="⚽")
 
+# --- License Activation ---
+@st.cache_data
+def activate_license():
+    from amplpy import modules
+
+    # Activate the license (e.g., a free https://ampl.com/ce license)
+    uuid = st.secrets["ampl_uuid"]
+    if uuid is not None:
+        modules.activate(uuid)
+    return uuid
+
+activate_license()
+
 # --- Custom Styling ---
 st.markdown("""
     <style>
