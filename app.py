@@ -77,8 +77,14 @@ def simulate_goals(rank1, rank2):
     gd = max(-5, min(5, gd))
     
     # Rule: Individual team goals between 0 and 5
+    extra = 0
     max_extra = 5 - abs(gd)
-    extra = random.randint(0, max_extra)
+    
+    prob = 0.30
+    for _ in range(max_extra):
+        if random.random() < prob:
+            extra += 1
+        prob = max(0.1, prob - 0.05)
     
     if gd >= 0:
         return gd + extra, extra
@@ -162,6 +168,18 @@ with st.sidebar:
     if col_sim2.button("Simulate 1R & 2R", help="Simulate first two matches for every team."):
         run_simulation_batch(48)
         st.rerun()
+    
+    # Centered Load Real Results button
+    _, col_load, _ = st.columns([0.1, 0.8, 0.1])
+    if col_load.button("Load Real Results", help="Load real results so far.", use_container_width=True):
+        res_teams, res_fixture = load_data('fifa_world_cup_2026_results.xlsx')
+        st.session_state.df_teams = res_teams
+        st.session_state.df_fixture = res_fixture
+        if 'best_results' in st.session_state: del st.session_state.best_results
+        if 'worst_results' in st.session_state: del st.session_state.worst_results
+        st.success("Real results loaded!")
+        st.rerun()
+
 
     st.divider()
     
