@@ -38,7 +38,6 @@ st.markdown("""
 # --- Initial Data Handling ---
 DEFAULT_FILE = 'fifa_world_cup_2026.xlsx'
 
-@st.cache_data
 def load_data(file):
     df_teams = pd.read_excel(file, sheet_name='teams')
     df_fixture = pd.read_excel(file, sheet_name='fixture')
